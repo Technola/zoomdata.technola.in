@@ -1,0 +1,926 @@
+<?php
+/**
+ * Controller genrated using LaraAdmin
+ * Help: http://laraadmin.com
+ */
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use DB;
+use Auth;
+use App\Role;
+use App\User;
+use Session;
+use Mail;
+use App\Models\BusinessContact;
+use Illuminate\Support\Facades\Input;
+
+/**
+ * Class HomeController
+ * @package App\Http\Controllers
+ */
+class BuildlistController extends Controller{
+	public $frontpages = array();
+    public $user_id = array();
+    /**
+     * Create a new controller instance.
+     *
+     * @return void
+    **/
+    public function __construct()
+    {
+        $userid = Session::get('user_id');
+        //print_r($userid);die;
+        $username = Session::get('user_name');
+        $this->frontpages = DB::table('frontpages')->whereNull('deleted_at')->get();
+        // $if_exist =1;
+        if (!isset($userid)) { 
+            return redirect("/home");
+        }
+        $this->user_id = $userid;
+        $this->user_name = $username;
+        
+        //echo '<pre>'; print_r($this->frontpages); echo '</pre>';
+    }
+    /***BUILDLIST PAGE AND ALSO PAGE FUNCTIONALITY***/
+    public function index()
+    {
+        
+        $searchid = '';
+        $dataId='';
+        $searchByJob='';
+        $where = '';
+        $sql_key ='';
+        $userid = Session::get('user_id');
+        /****SAVED SEARCH DATA****/
+        if(isset($_GET['searchid'])){
+            $searchid = $_GET['searchid'];
+        }
+        if(isset($_GET['job_level'])){
+          $searchByJob = $_GET['job_level'];
+          $dataId = 'joblevels';
+          $sql_key = 'job_level';
+        }
+       
+        $serchinfo = DB::table('savesearch')->where('id', $searchid)->first();
+        //print_r($serchinfo);die('156');
+        if(!empty($serchinfo)){
+            $save_id = $serchinfo->allsavedataid;
+            $save_filter = $serchinfo->filters; 
+            $save_id_exp = (explode(",",$save_id));
+            $save_filter_exp = json_decode($save_filter,true);
+            $totalamt = $serchinfo->totalamt;
+            $totlacontact = $serchinfo->totlacontact;
+        }
+         $save_filter_exp =  !empty($save_filter_exp)?$save_filter_exp:'';
+        $buildlist = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='buildlist') {
+                $buildlist = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $buildlist->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $buildlist->image = url('/').'/storage/uploads/'.$banner_image; 
+
+        if($searchid){
+
+            $contacts =  DB::table('businesscontacts')->whereIn('id', $save_id_exp)->get();
+            
+        }else{
+
+            if($searchByJob !='')
+            {
+              
+            $contacts = DB::table('businesscontacts')
+                     ->select(DB::raw('*'))
+                     ->where('country', 'United States')
+                     ->where($sql_key, $searchByJob)
+                     ->limit(20)
+                     ->get(); 
+            if(!empty($contacts)){
+             $total_contacts=count($contacts);
+            }         
+
+            $price = $this->getPrice($total_contacts);   
+            
+
+            }else{
+
+               $contacts =  DB::table('businesscontacts')->where('country', 'United States')->take(20)->get(); 
+            }
+
+               
+            
+        }
+        //print_r($contacts);die;
+        foreach($contacts as $key => $contact){
+            // Replace string in Email
+            $email = $contact->email_address;
+            $len = strlen($email);
+            $str1 = '';
+            for($i=0; $i < $len; $i++) {
+                if($i < 3 || $i > 10 && $i != ($len-2)) {
+                   $str1 .= '*';
+                } else {
+                   $str1 .= $email[$i];
+                }
+            }
+            $contacts[$key]->email_address = $str1;
+
+            // Replace string in Last Name
+            $last_name = $contact->last_name;
+            $len = strlen($last_name);
+            $str2 = '';
+            for($i=0; $i < $len; $i++) {
+                if($i < 3 || $i > 5 && $i != ($len-2)) {
+                   $str2 .= '*';
+                } else {
+                   $str2 .= $last_name[$i];
+                }
+            }
+            $contacts[$key]->last_name = $str2;
+
+             // Replace string in Company Name
+            // $company_name = $contact->company_name;
+            // $len = strlen($company_name);
+            // $str3 = '';
+            // for($i=0; $i < $len; $i++) {
+            //     if($i < 3 || $i > 5 && $i != ($len-2)) {
+            //        $str3 .= '*';
+            //     } else {
+            //        $str3 .= $company_name[$i];
+            //     }
+            // }
+            // $contacts[$key]->company_name = $str3;
+
+             // Replace string in Company Name
+            $phone_number = $contact->phone_number;
+            $len = strlen($phone_number);
+            $str4 = '';
+            for($i=0; $i < $len; $i++) {
+                if($i != ($len-1)) {
+                   $str4 .= '*';
+                } else {
+                   $str4 .= $phone_number[$i];
+                }
+            }
+            $contacts[$key]->phone_number = $str4;
+
+        }
+
+        $industries = DB::table('businesscontacts')->select('industries')->whereNull('deleted_at')->get();
+       // print_r($industries);die;
+        $indus = array();
+        foreach ($industries as $key => $value) { 
+            $string = substr($value->industries, 0, strpos($value->industries, ','));
+            if (!in_array($string, $indus)) {
+                array_push($indus, $string);
+            }    
+        }
+        // print_r($indus);die;
+        $job_levels=array();
+        $job_level = DB::table('businesscontacts')->select('job_level')->whereNull('deleted_at')->get();
+        foreach ($job_level as $key => $value) { 
+        	if(!empty($value)){
+                $checkarray = explode(',',$value->job_level);
+                $count =  count($checkarray);
+                if($count>1){
+                  $string = substr($value->job_level, 0, strpos($value->job_level, ','));
+                }else{
+                  $string = $value->job_level;
+                }
+        		if(!empty($string)){
+        			if (!in_array($string, $job_levels)) {
+	                	array_push($job_levels, $string);
+	            	}
+        		}   
+        	}      
+        }
+        $job_functions=array();
+        $job_function = DB::table('businesscontacts')->select('job_function')->whereNull('deleted_at')->get();
+        
+        if(isset($job_function) && !empty($job_function)){
+        	foreach ($job_function as $key => $value) {
+        		if(!empty($value)){
+        			$jobs = $value->job_function;
+        			if(!empty($jobs)){
+        				if (!in_array($jobs, $job_functions)) {
+	                		array_push($job_functions, $jobs);
+	            		}
+        			}
+        			
+        		}
+        	}
+        }
+        // print_r($job_functions);die;
+        $country = DB::table('businesscontacts')->select('country')->whereNull('deleted_at')->get();
+        $countries = array();
+        foreach ($country as $key => $value) { 
+            $cnt = $value->country;
+            if (!in_array($cnt, $countries)) {
+                array_push($countries, $cnt);
+            }    
+        }
+
+        $state = DB::table('businesscontacts')->select('state')->whereNull('deleted_at')->get();
+        $stat = array();
+        foreach ($state as $key => $value) { 
+            $states = $value->state;
+            if (!in_array($states, $stat)) {
+                array_push($stat, $states);
+            }    
+        }
+
+        $city = DB::table('businesscontacts')->select('city')->whereNull('deleted_at')->get();
+        $cities = array();
+        foreach ($city as $key => $value) { 
+            $citys = $value->city;
+            if (!in_array($citys, $cities)) {
+                array_push($cities, $citys);
+            }    
+        }
+        $employee_range = DB::table('businesscontacts')->select('employees')->whereNull('deleted_at')->get();
+        return View('template.buildlist', [
+            'frontpages' => $this->frontpages,
+            'buildlist' => $buildlist,
+            'currentid' => isset($this->user_id)?$this->user_id:'',
+            'username' => isset($this->user_name)?$this->user_name:'',
+            'page' => 'buildlist',
+            'dataId'=>$dataId,
+            'business_contacts' => $contacts,
+            'filter_indus' => $indus,
+            'filter_contry' => $countries,
+            'filter_state' => $stat,
+            'filter_city' => $cities,
+            'filter_data'=>$save_filter_exp,
+            'filter_jobs'=>$job_levels,
+            'filter_jobfuns'=>$job_functions,
+            'total_contacts'=>isset($total_contacts) ? $total_contacts : '',
+            'range_of_contact'=>isset($total_contacts) ? $total_contacts : '',
+            'price'=>isset($price)?$price:'',
+            'rangeofstyle'=>isset($rangeofstyle)?$rangeofstyle:'',
+            'countryfilters'=>isset($countryfilters)?$countryfilters:'',
+            'searchByJob' => isset($searchByJob) ? $searchByJob : '',
+            'dataId'=> isset($dataId) ? $dataId : '' 
+        ]);
+    }
+
+
+
+
+    
+
+    /***BUILDLIST FILTERS FUNCTIONALITY***/ 
+    public function filter(Request $request){
+
+
+        $fields = $request->data;
+        $ranges =$request->range;
+        $final_indus = array();
+        $where_industries='';
+        $where_company='';
+        $where_fields = '';
+        $where = '';
+        $contry_json_data=array();
+        $industries_count = 0;
+        $if_exist =1;
+        $flag = 0;
+        $randomStringfirst = '';
+        $randomStringlast='';
+        
+        if( isset($fields) && !empty($fields) ){
+            if( isset($fields['url_details']) && !empty($fields['url_details']) ){
+                $url_save_result = $fields['url_details'];
+                unset($fields['url_details']);
+            }
+            if( isset($fields['sample']) && !empty($fields['sample']) ){/*Run Example for secrh*/
+                $sample = $fields['sample'];
+                unset($fields['sample']);
+            }
+           
+            //$fiter_jsondata=json_encode($fields);
+        }
+
+        /*Validation check for employee range and add to filter query*/
+        if(isset($ranges) && !empty($ranges)){//print_r($ranges);die;
+            $flag=1;
+            if( !empty($ranges['first_range']) && !empty($ranges['second_range']) && !empty($fields) ){
+                $where .='emp_min>= '."'".$ranges['first_range']."'".' and emp_max<='."'".$ranges['second_range']."'".' and';
+
+                $Employee=''.$ranges['first_range'].'-'.$ranges['second_range'];
+
+            }elseif(!empty($ranges['first_range']) && !empty($ranges['second_range']) && empty($fields)){
+                $where .='emp_min>= '."'".$ranges['first_range']."'".' and emp_max<='."'".$ranges['second_range']."'".' ';
+                 $Employee=':'.$ranges['first_range'].'-'.$ranges['second_range'];
+
+            }elseif(!empty($ranges['first_range']) && empty($ranges['second_range']) && !empty($fields)){
+                $where .='emp_min>= '."'".$ranges['first_range']."'".' and emp_max<="1000000000" and';
+                 $Employee=''.$ranges['first_range'].'- 1000000000';
+
+            }elseif(!empty($ranges['first_range']) && empty($ranges['second_range']) && empty($fields)){
+                $where .='emp_min>= '."'".$ranges['first_range']."'".' and emp_max<="1000000000" ';
+                $Employee=''.$ranges['first_range'].'- 1000000000';
+            }elseif(empty($ranges['first_range']) && !empty($ranges['second_range']) && !empty($fields)){
+                $where .='emp_min>="0" and   emp_max<= '."'".$ranges['second_range']."'".' and ';
+                $Employee='0-'.$ranges['second_range'];
+            }elseif(empty($ranges['first_range']) && !empty($ranges['second_range']) && empty($fields)){
+                $where .='emp_min>="0"  and emp_max<= '."'".$ranges['second_range']."'".'  ';
+                $Employee=' 0-'.$ranges['second_range'];//$fields['Employee'][0]
+            }
+        }
+
+        /* Validation check for employee job_function and add to filter query*/
+        if(isset($fields['job_function']) && !empty($fields['job_function'])) {
+        	$job_functions = $fields['job_function'];
+        	// $fields['Jobfunctions'] = $fields['job_function'];
+            $flag=1;
+        	unset($fields['job_function']);
+            if( isset($job_functions) && !empty($job_functions) ) {
+            	$total = count($job_functions);
+                $total=$total-1;
+                $where .='( ';
+            	foreach ($job_functions as $key => $value) {
+            		if($total>$key ){
+                        $where  .=  ' job_function LIKE  '."'".'%'.$value.'%' ."'".' or '; 
+                    } elseif($total==$key && !empty($fields) ) {
+                        $where  .= ' job_function LIKE  ' ."'".'%'.$value.'%'."' ) and" ;
+                         
+                    } elseif($total==$key ) {
+                        $where  .= ' job_function LIKE  ' ."'".'%'.$value.'%'."'  )" ;
+                         
+                    }
+            	}
+            }
+        }
+        
+        /*Validation check for employee job_level and add to filter query*/
+        if( isset($fields['job_level']) && !empty($fields['job_level']) ) {
+        	$job_levels = $fields['job_level'];
+        	// $fields['joblevels'] = $fields['job_level'];
+            $flag=1;
+        	unset($fields['job_level']);
+        
+            if( isset($job_levels) && !empty($job_levels) ) {
+            	$total = count($job_levels);
+                $total=$total-1;
+                $where .='( ';
+            	foreach ($job_levels as $key => $value) {
+            		if($total>$key ){
+                        $where  .=  ' job_level LIKE  '."'".'%'.$value.'%' ."'".' or '; 
+                    } elseif($total==$key && !empty($fields) ) {
+                        $where  .= ' job_level LIKE  ' ."'".'%'.$value.'%'."' ) and" ;
+                         
+                    } elseif($total==$key ) {
+                        $where  .= ' job_level LIKE  ' ."'".'%'.$value.'%'."'  )" ;
+                         
+                    }
+            	}
+            }
+        }
+
+
+        /*Validation check for employee industries and  add to filter query*/
+        if(isset($fields['industries']) && !empty($fields['industries'])){
+        	$industries = $fields['industries'];
+        	// $fields['industry'] = $fields['industries'];
+            $flag = 1;
+        	unset($fields['industries']);
+        
+            if(isset($industries) && !empty($industries)){
+                $total = count($industries);
+                $total=$total-1;
+                $where .='( ';
+                foreach ($industries as $key => $value) {
+                    if($total>$key ){
+                        $where  .=  ' industries LIKE  '."'".'%'.$value.'%' ."'".' or '; 
+                    } elseif($total==$key && !empty($fields) ) {
+                        $where  .= ' industries LIKE  ' ."'".'%'.$value.'%'."' ) and" ;
+                         
+                    } elseif($total==$key ) {
+                        $where  .= ' industries LIKE  ' ."'".'%'.$value.'%'."'  )" ;
+                         
+                    }
+                    
+                }
+                unset($fields['industries']);
+            }
+        }
+
+        /*Validation check for employee company_name and  add to filter query*/
+        if(!empty($fields['company_name']) && !empty($fields['company_name']) ){
+        	$company_name = $fields['company_name'];
+        	// $fields['company'] = $fields['company_name'];
+            $flag = 1;
+        	unset($fields['company_name']);
+        
+            if(isset($company_name) && !empty($company_name)){
+                $total = count($company_name);
+                $total=$total-1;
+                $where .=' (';
+                foreach ($company_name as $key => $value) {
+                    if ($total>$key) {
+                        $where  .=  ' company_name LIKE  '."'".'%'.$value.'%' ."'".' or ';
+                    }  elseif($total==$key && !empty($fields) ) {
+                        $where  .= ' company_name LIKE  ' ."'".'%'.$value.'%'."' ) and" ;
+                        
+                    } elseif($total==$key) {
+                        $where  .= ' company_name LIKE  ' ."'".'%'.$value.'%'."' ) " ;
+                        
+                    }
+                }
+                
+            }
+        }
+
+        /* validation check for Other fileds here  */ 
+        if(isset($fields) && !empty($fields)){
+            $flag = 1;
+        	$key_count=1;
+        	foreach ($fields as $key => $value) {
+        		// var_dump($value);
+	        	$total = count($fields);
+				$value = implode("','",$value);
+				$value = "'".$value."'";
+	        	if( $total > $key_count ){
+	        		$where  .=' '.$key.'  in ('.$value.') and'; 
+	        	}else if($total==$key_count) {
+	        		$where  .=' '.$key.' in ('.$value.')'; 
+	        	}
+	        	$key_count++;
+	        	
+        	}
+        }
+        
+        if(isset($fields['country']) && !empty($fields['country']) ){
+
+            $contry_json_data['country'] = $fields['country'];
+            $contry_json_data=json_encode($contry_json_data);
+            unset($fields['country']);
+        }
+        if(!empty($job_functions)){
+        	$fields['Jobfunctions'] = $job_functions;
+        }
+        if(!empty($job_levels)){
+        	$fields['joblevels'] = $job_levels;
+        }
+        if(!empty($industries)){
+        	$fields['industry'] = $industries;
+        }
+        if(!empty($company_name)){
+        	$fields['company'] = $company_name;
+        }
+        if(!empty($Employee)){
+            $fields['Employee'][0]=$Employee;
+        }
+
+        /**HERE INSERT ALL SEARCH FILEDS**/
+        if(isset($fields) && !empty($fields)){
+        	 $fiter_jsondata=json_encode($fields);
+        }
+
+
+        if(isset($where) && !empty($where) ){
+            ///DB::enableQueryLog();
+            $final_result = DB::select('select * from businesscontacts where '.$where );
+         //  $query = DB::getQueryLog();
+           // dd($query);
+        }
+
+        if(isset($fields) && !empty($fields)){
+            foreach ($fields as $field => $value){
+                if(is_array($value) && $field == 'industries'){
+                    array_shift($value);
+                   $result =  array_values($value);
+                }
+            }
+        }
+       
+        $counts=0;
+        if(isset($final_result) && !empty($final_result)){
+            $flag = 1;
+            $counts = count($final_result);
+            $filer_ids=array(); 
+            foreach ($final_result as $key => $value) {
+                $filer_ids[] = $value->id;
+            }
+            $filer_ids =  implode(",",$filer_ids); 
+        }
+
+        if(isset($counts) && $counts>0){
+        	switch ($counts) {
+			  case $counts<=549:$price = 0.99*$counts ;break;
+			  case $counts >549     &&  $counts<=1000     :$price =0.19*$counts ;break;
+			  case $counts >1000    &&  $counts<=5000     :$price =0.17*$counts ;break;
+			  case $counts >=5001   &&  $counts<=10000    :$price =0.15*$counts ;break;
+			  case $counts >=10001  &&  $counts<=25000    :$price =0.13*$counts ;break;
+			  case $counts >=25001  &&  $counts<=50000    :$price =0.11*$counts ;break;
+			  case $counts >=50001  &&  $counts<=100000   :$price =0.09*$counts ;break;
+			  case $counts >=100001 &&  $counts<=500000   :$price =0.07*$counts ;break;
+			  case $counts >=500001 &&  $counts<=1000000  :$price =0.05*$counts ;break;
+			}
+        }
+        $price =  !empty($price)?$price:'';
+        $contry_json_data =  !empty($contry_json_data)?$contry_json_data:'';
+        /**HERE CREATE RANDAM STRING FOR ENCRYPTION**/
+        if($flag==1){
+            $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            $charactersLength = strlen($characters);
+            $randomStringfirst = '';
+            for ($i = 0; $i < 8; $i++) {
+                $randomStringlast .= $characters[rand(0, $charactersLength - 1)];
+            }
+            for ($i = 0; $i < 10; $i++) {
+                $randomStringfirst .= $characters[rand(0, $charactersLength - 1)];
+            }
+        }
+        //echo $randomString;die;
+        /*Validation check for url slug and after filtering save data in save_result table*/
+        // print_r($url_save_result);die;
+        if(isset($url_save_result) && !empty($url_save_result)){
+            $url_save_result = explode("/",$url_save_result);
+        }
+        // print_r($url_save_result);die;
+        $concatvalue =  !empty($concatvalue)?$concatvalue:'';
+        $price_incr =  !empty($price_incr)?$price_incr:'';
+        $price_incr =  !empty($price_incr)?$price_incr:'';
+        $fiter_jsondata =  !empty($fiter_jsondata)?$fiter_jsondata:'';
+        if( isset($url_save_result[2]) && !empty($url_save_result[2])  ){//die('238');
+            $url_save_exist = $url_save_result[2];
+            // $rand_number  = rand(10,1000000);
+            $value             =  substr($url_save_exist,10);
+            $encryptedata      =  base64_decode($value);
+            $url_save_exist_id =  substr($encryptedata, 0, -8);
+            $url_save_exist_id =  explode("=",$url_save_exist_id);
+            $url_save_exist_id =  $url_save_exist_id[1];
+            //print_r($url_save_exist_id);die('ddd');
+            
+            $concatvalue =  'id='.$url_save_exist_id.$randomStringlast;;
+            $save_id_checked = DB::table('save_result')
+                     ->select(DB::raw('*'))
+                     ->where('id', $url_save_exist_id)
+                     ->first();   
+            if( isset($save_id_checked) && !empty($save_id_checked) && !empty($filer_ids) && $flag==1){//die('dd');
+                DB::table('save_result')
+                    ->where('id', $save_id_checked->id)
+                        ->update(array('allsavedata' => $filer_ids,'filters'=>$fiter_jsondata,'totalamt'=>$price_incr,'totlacontact'=>$counts,'rangeofcontact'=>$counts,'countryfilters'=>$contry_json_data));
+            }elseif(empty($filer_ids) && $flag==1){
+                DB::table('save_result')
+                    ->where('id', $save_id_checked->id)
+                        ->update(array('allsavedata' => '','filters'=>$fiter_jsondata,'totalamt'=>$price_incr,'totlacontact'=>$counts,'rangeofcontact'=>$counts,'countryfilters'=>$contry_json_data));
+            }
+            else if(!empty($save_id_checked) && $flag==0 && isset($sample) && $sample==1 ){/*If no fileds select*/
+               /*Sample for Run example if url encode value exist*/
+                $final_result = DB::table('businesscontacts')
+                     ->select(DB::raw('*'))
+                     ->where('country', 'United States')
+                     ->limit(20)
+                     ->get();  
+                    //print_r($final_result);die;
+                // if(isset($final_result) && !empty($final_result)){
+                //     $counts = count($final_result);
+                //     $filer_ids=array(); 
+                //     foreach ($final_result as $key => $value) {
+                //         $filer_ids[] = $value->id;
+                //     }
+
+                // }
+                // $filer_ids =  implode(",",$filer_ids); 
+                // $save_result_check = DB::select('select * from save_result ');
+                // $count_save_result = count($save_result_check)+1;
+                // $rand_number  = rand(10,1000000);
+                // // $concatvalue = $rand_number.$count_save_result;
+                // $savedata = DB::table('save_result')->insert(array( 'allsavedata' => $filer_ids,  'totalamt' => $price, 'totlacontact' => $counts,'rangeofcontact'=>$counts,'countryfilters'=>$contry_json_data));
+
+            }         
+        }else if($flag==0 && isset($sample) && $sample==1){
+            /*Sample for Run example if url encode value not exist*/
+             $final_result = DB::table('businesscontacts')
+                     ->select(DB::raw('*'))
+                     ->where('country', 'United States')
+                     ->limit(20)
+                     ->get(); 
+
+            
+        }else if($flag == 1 && empty($sample) && !empty($filer_ids)){
+            $save_result_check=DB::table('save_result')->latest('id')->first()->id;
+            $count_save_result = $save_result_check+1;
+            $count_save_result ='id='.$count_save_result.$randomStringlast;
+            
+            $concatvalue = $count_save_result;
+            $savedata = DB::table('save_result')->insert(array( 'allsavedata' => $filer_ids, 'filters' => $fiter_jsondata, 'totalamt' => $price, 'totlacontact' => $counts,'rangeofcontact'=>$counts,'countryfilters'=>$contry_json_data));
+        }else if($flag == 1 && empty($sample) && empty($filer_ids)){
+            $save_result_check=DB::table('save_result')->latest('id')->first()->id;
+            $count_save_result = $save_result_check+1;
+            $count_save_result ='id='.$count_save_result.$randomStringlast;
+            
+            $concatvalue = $count_save_result;
+            $savedata = DB::table('save_result')->insert(array( 'allsavedata' => '', 'filters' => $fiter_jsondata, 'totalamt' => $price, 'totlacontact' => $counts,'rangeofcontact'=>$counts,'countryfilters'=>$contry_json_data));
+        }
+        
+        if( !empty($concatvalue) && empty($sample) ) {//die('dd');
+        /** Here data encrypte Save id in save result table **/
+            $concatvalue=$randomStringfirst.base64_encode($concatvalue);
+        }else{
+            /** RUN TO SAMPLE BUTTON CLICK **/
+            $concatvalue = '';
+        }     
+       // echo $concatvalue;die('dsf');
+        $concatvalue =  !empty($concatvalue)?$concatvalue:'';
+
+        $final_result =  !empty($final_result)?$final_result:'';
+
+        return response()->json(array('result'=>$final_result, 'count' => $counts, 'price' => $price,'save_result'=>$concatvalue));die();
+    }
+
+    /** AFTER BUILDLIST FILTERS & SAVEd FILTRED DATA  IN DATABASE, SHOW THE SAVE DATA  THIS SECTION **/ 
+    public function secrhbyid($value=null){
+        // $url_save_exist_id = substr(base64_decode($id), 6);
+        // echo $value;die('dd');
+        $where='';
+        $value             =  substr($value,10);
+        $encryptedata      =  base64_decode($value);
+        $url_save_exist_values =  substr($encryptedata, 0, -8);
+        $url_save_exist_values =explode("=",$url_save_exist_values);
+        // print_r($url_save_exist_values);die;
+        $filtertype  = $url_save_exist_values[0];
+        $url_save_exist_id=$url_save_exist_values[1];
+        // print_r($url_save_exist_id);die;
+        if($filtertype==='id') {
+           
+            $serchinfo = DB::table('save_result')->where('id', $url_save_exist_id)->first();
+            if(!empty($serchinfo)) {
+                $save_id = $serchinfo->allsavedata;
+                $save_filter = $serchinfo->filters; 
+                $save_id_exp = (explode(",",$save_id));
+                $save_filter_exp = json_decode($save_filter,true);
+                $totalamt = $serchinfo->totalamt;
+                $totlacontact = $serchinfo->totlacontact;
+                $range_of_contact = $serchinfo->rangeofcontact;
+                $rangeofstyle= $serchinfo->rangeofstyle;
+                $countryfilters=$serchinfo->countryfilters;
+                if(!empty($countryfilters)){
+                    $countryfilters = json_decode($countryfilters,true);
+                }
+
+            }
+            // print_r($countryfilters);die;
+
+            // echo $range_of_contact;die;
+            $contacts =  DB::table('businesscontacts')->whereIn('id', $save_id_exp)->get();
+        }
+        if($filtertype=='job_level'){
+             $where  .=  ' job_level LIKE  '."'".'%'.$url_save_exist_id.'%' ."'".'  ';  
+
+            $contacts = DB::select('select * from businesscontacts where '.$where );
+        }
+        //print_r($final_result);die;
+        $rangeofstyle =  !empty($rangeofstyle)?$rangeofstyle:'';
+            $countryfilters =  !empty($countryfilters)?$countryfilters:'';
+            $range_of_contact =  !empty($range_of_contact)?$range_of_contact:'';
+
+
+        if(!empty($contacts)){
+        	$total_contacts=count($contacts);
+        }
+        $total_contacts =  !empty($total_contacts)?$total_contacts:'';
+        $price =  !empty($totalamt)?$totalamt:'';
+        $save_filter_exp =  !empty($save_filter_exp)?$save_filter_exp:'';
+        $buildlist = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='buildlist') {
+                $buildlist = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $buildlist->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $buildlist->image = url('/').'/storage/uploads/'.$banner_image; 
+
+        if(isset($contacts) &&  !empty($contacts)){
+            foreach($contacts as $key => $contact){
+                // Replace string in Email
+                $email = $contact->email_address;
+                $len = strlen($email);
+                $str1 = '';
+                for($i=0; $i < $len; $i++) {
+                    if($i < 3 || $i > 10 && $i != ($len-2)) {
+                       $str1 .= '*';
+                    } else {
+                       $str1 .= $email[$i];
+                    }
+                }
+                $contacts[$key]->email_address = $str1;
+
+                // Replace string in Last Name
+                $last_name = $contact->last_name;
+                $len = strlen($last_name);
+                $str2 = '';
+                for($i=0; $i < $len; $i++) {
+                    if($i < 3 || $i > 5 && $i != ($len-2)) {
+                       $str2 .= '*';
+                    } else {
+                       $str2 .= $last_name[$i];
+                    }
+                }
+                $contacts[$key]->last_name = $str2;
+
+                 // Replace string in Company Name
+                $company_name = $contact->company_name;
+                $len = strlen($company_name);
+                $str3 = '';
+                for($i=0; $i < $len; $i++) {
+                    if($i < 3 || $i > 5 && $i != ($len-2)) {
+                       $str3 .= '*';
+                    } else {
+                       $str3 .= $company_name[$i];
+                    }
+                }
+                $contacts[$key]->company_name = $str3;
+
+                 // Replace string in Company Name
+                $phone_number = $contact->phone_number;
+                $len = strlen($phone_number);
+                $str4 = '';
+                for($i=0; $i < $len; $i++) {
+                    if($i != ($len-1)) {
+                       $str4 .= '*';
+                    } else {
+                       $str4 .= $phone_number[$i];
+                    }
+                }
+                $contacts[$key]->phone_number = $str4;
+
+            }
+        }
+        
+        
+
+        $industries = DB::table('businesscontacts')->select('industries')->whereNull('deleted_at')->get();
+       // print_r($industries);die;
+        $indus = array();
+        foreach ($industries as $key => $value) { 
+            $string = substr($value->industries, 0, strpos($value->industries, ','));
+            if (!in_array($string, $indus)) {
+                array_push($indus, $string);
+            }    
+        }
+        // print_r($indus);die;
+        $job_levels=array();
+        $job_level = DB::table('businesscontacts')->select('job_level')->whereNull('deleted_at')->get();
+        foreach ($job_level as $key => $value) { 
+            if(!empty($value)){
+                $checkarray = explode(',',$value->job_level);
+                $count =  count($checkarray);
+                if($count>1){
+                  $string = substr($value->job_level, 0, strpos($value->job_level, ','));
+                }else{
+                  $string = $value->job_level;
+                }
+                if(!empty($string)){
+                    if (!in_array($string, $job_levels)) {
+                        array_push($job_levels, $string);
+                    }
+                }   
+            }      
+        }
+        $job_functions=array();
+        $job_function = DB::table('businesscontacts')->select('job_function')->whereNull('deleted_at')->get();
+        
+        if(isset($job_function) && !empty($job_function)){
+            foreach ($job_function as $key => $value) {
+                if(!empty($value)){
+                    $jobs = $value->job_function;
+                    if(!empty($jobs)){
+                        if (!in_array($jobs, $job_functions)) {
+                            array_push($job_functions, $jobs);
+                        }
+                    }
+                    
+                }
+            }
+        }
+        // print_r($job_functions);die;
+        $country = DB::table('businesscontacts')->select('country')->whereNull('deleted_at')->get();
+        $countries = array();
+        foreach ($country as $key => $value) { 
+            $cnt = $value->country;
+            if (!in_array($cnt, $countries)) {
+                array_push($countries, $cnt);
+            }    
+        }
+
+        $state = DB::table('businesscontacts')->select('state')->whereNull('deleted_at')->get();
+        $stat = array();
+        foreach ($state as $key => $value) { 
+            $states = $value->state;
+            if (!in_array($states, $stat)) {
+                array_push($stat, $states);
+            }    
+        }
+
+        $city = DB::table('businesscontacts')->select('city')->whereNull('deleted_at')->get();
+        $cities = array();
+        foreach ($city as $key => $value) { 
+            $citys = $value->city;
+            if (!in_array($citys, $cities)) {
+                array_push($cities, $citys);
+            }    
+        }
+        $employee_range = DB::table('businesscontacts')->select('employees')->whereNull('deleted_at')->get();
+        return View('template.buildlist', [
+            'frontpages' => $this->frontpages,
+            'buildlist' => $buildlist,
+            'currentid' => isset($this->user_id)?$this->user_id:'',
+            'username' => isset($this->user_name)?$this->user_name:'',
+            'page' => 'buildlist',
+            'business_contacts' => $contacts,
+            'filter_indus' => $indus,
+            'filter_contry' => $countries,
+            'filter_state' => $stat,
+            'filter_city' => $cities,
+            'filter_data'=>$save_filter_exp,
+            'filter_jobs'=>$job_levels,
+            'filter_jobfuns'=>$job_functions,
+            'total_contacts'=>$total_contacts,
+            'range_of_contact'=>$range_of_contact,
+            'price'=>$price,
+            'rangeofstyle'=>$rangeofstyle,
+            'countryfilters'=>$countryfilters
+        ]);
+    }
+
+    /** THIS SECTION SET FOR RANGE OF TOTAL CONTACT AFTER FILTER DATA  **/
+    public function ranges_of_contact(Request $request){
+    	$totlacontact = $request->range_of_contact;
+    	$url_details = $request->url_details;
+        $ranfgeofstyle=$request->ranfgeofstyle;
+        //echo $ranfgeofstyle;die;
+    	if($totlacontact>0){
+        	switch ($totlacontact) {
+			  case $totlacontact <=549:$price = 0.99*$totlacontact ;break;
+			  case $totlacontact >549     &&  $totlacontact<=1000     :$price =0.19*$totlacontact ;break;
+			  case $totlacontact >1000    &&  $totlacontact<=5000     :$price =0.17*$totlacontact ;break;
+			  case $totlacontact >=5001   &&  $totlacontact<=10000    :$price =0.15*$totlacontact ;break;
+			  case $totlacontact >=10001  &&  $totlacontact<=25000    :$price =0.13*$totlacontact ;break;
+			  case $totlacontact >=25001  &&  $totlacontact<=50000    :$price =0.11*$totlacontact ;break;
+			  case $totlacontact >=50001  &&  $totlacontact<=100000   :$price =0.07*$totlacontact ;break;
+			  case $totlacontact >=100001 &&  $totlacontact<=500000   :$price =0.05*$totlacontact ;break;
+			  case $totlacontact >=500001 &&  $totlacontact<=1000000  :$price =0.03*$totlacontact ;break;
+			}
+        }
+
+    	if(isset($url_details) && !empty($url_details)){
+            $url_details = explode("/",$url_details);
+        }
+        // print_r($url_details);
+    	if( isset($url_details[2]) && !empty($url_details[2])  ){
+    		$url_details = base64_decode($url_details[2]);
+    		  //echo $url_details;die;
+            $url_save_exist_id = substr($url_details, 6);
+            $rand_number  = rand(10,1000000);
+            $concatvalue = $rand_number.$url_save_exist_id;
+            $save_id_checked = DB::table('save_result')
+                     ->select(DB::raw('*'))
+                     ->where('id', $url_save_exist_id)
+                     ->first(); 
+             // print_r($save_id_checked);die;
+            if( isset($save_id_checked) && !empty($save_id_checked)  && !empty($ranfgeofstyle)){//die('dd');
+                DB::table('save_result')
+                    ->where('id', $save_id_checked->id)
+                        ->update(array('totalamt'=>$price,'rangeofcontact'=>$totlacontact,'rangeofstyle'=>$ranfgeofstyle));
+            } else {
+                 DB::table('save_result')
+                    ->where('id', $save_id_checked->id)
+                        ->update(array('totalamt'=>$price,'rangeofcontact'=>$totlacontact));
+            }         
+    	}
+    	return response()->json(array( 'count' => $totlacontact, 'price' => $price,'save_result'=>base64_encode($concatvalue)));die();
+    }
+
+    function getPrice($counts=NULL){
+
+       if(isset($counts) && $counts>0){
+            switch ($counts) {
+              case $counts<=549:$price = 0.99*$counts ;break;
+              case $counts >549     &&  $counts<=1000     :$price =0.19*$counts ;break;
+              case $counts >1000    &&  $counts<=5000     :$price =0.17*$counts ;break;
+              case $counts >=5001   &&  $counts<=10000    :$price =0.15*$counts ;break;
+              case $counts >=10001  &&  $counts<=25000    :$price =0.13*$counts ;break;
+              case $counts >=25001  &&  $counts<=50000    :$price =0.11*$counts ;break;
+              case $counts >=50001  &&  $counts<=100000   :$price =0.09*$counts ;break;
+              case $counts >=100001 &&  $counts<=500000   :$price =0.07*$counts ;break;
+              case $counts >=500001 &&  $counts<=1000000  :$price =0.05*$counts ;break;
+            }
+        }
+       return $price =  !empty($price)?$price:'';
+     
+
+    }
+    
+
+}
+
+?>

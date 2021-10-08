@@ -1,0 +1,849 @@
+<?php
+/**
+ * Controller genrated using LaraAdmin
+ * Help: http://laraadmin.com
+ */
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use DB;
+use Auth;
+use App\Role;
+use App\User;
+use Session;
+use Mail;
+use App\Models\BusinessContact;
+
+/**
+ * Class HomeController
+ * @package App\Http\Controllers
+ */
+class HomeController extends Controller
+{
+    public $frontpages = array();
+    public $user_id = array();
+    /**
+     * Create a new controller instance.
+     *
+     * @return void
+    **/
+    public function __construct()
+    {
+        $userid = Session::get('user_id');
+        $this->frontpages = DB::table('frontpages')->whereNull('deleted_at')->get();
+        if (!isset($userid)) { 
+            return redirect("/home");
+        }
+        $this->user_id = $userid;
+        
+        //echo '<pre>'; print_r($this->frontpages); echo '</pre>';
+    }
+
+    /**
+     * Show the application dashboard.
+     *
+     * @return Response
+    **/
+    public function index()
+    {
+            $data = array();
+            $img = array('image','track_image');
+                $sliders = DB::table('slider_images')->whereNull('deleted_at')->get();
+                //echo "<pre>";print_r($this->frontpages);
+                foreach ($this->frontpages as $pagekey => $pagedata) {
+                    if ($pagedata->slug =='home') {
+                        $data = $this->frontpages[$pagekey];
+                        // foreach ($img as $key => $imgkey) {
+                        //     $dashimage = DB::table('uploads')->where('id',$this->frontpages[$pagekey]->$imgkey)->get()[0]->name;
+                        //     $data->$imgkey = str_replace("public","",url('/')).'storage/uploads/'.$dashimage;
+                        // }
+                    }
+                }
+                foreach ($sliders as $key => $value) {
+                    $image = DB::table('uploads')->where('id',$value->image)->get()[0]->name;
+                    $imgpath = url('/').'/storage/uploads/'.$image;
+                    $sliders[$key]->image_path = $imgpath;
+                }
+               
+                return View('home', [
+                    'frontpages' => $this->frontpages,
+                    'sliders' => $sliders,
+                    'homedata' => $data,
+                    'currentid' => $this->user_id,
+                    'page' => 'home',
+                    ]);
+    }
+
+    public function about()
+    {
+        $aboutdata = array();
+        $img = array('image','fet_img_one','fet_img_two');
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='about') {
+                $aboutdata = $this->frontpages[$pagekey];
+                foreach ($img as $key => $imgkey) {
+                    //$dashimage = DB::table('uploads')->where('id',$this->frontpages[$pagekey]->$imgkey)->get()[0]->name;
+                    //$aboutdata->$imgkey = str_replace("public","",url('/')).'storage/uploads/'.$dashimage;
+                }
+            }
+        }
+        $imgid = $aboutdata->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $aboutdata->image = url('/').'/storage/uploads/'.$bnr_img;
+        return View('new.about', [
+            'frontpages' => $this->frontpages,
+            'aboutdata' => $aboutdata,
+            'currentid' => $this->user_id,
+            'page' => 'about'
+        ]);
+    }
+
+    public function contact($status='')
+    {
+        $contactdata = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='contact') {
+                $contactdata = $this->frontpages[$pagekey];
+            }
+        }
+        return View('new.contact', [
+                'frontpages' => $this->frontpages,
+                'contactdata' => $contactdata,
+                'page' => 'contact',
+                'currentid' => $this->user_id,
+                'status'  => $status
+        ]);
+    }
+
+    public function pricing()
+    {
+        $pricing = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='pricing') {
+                $pricing = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $pricing->image;
+        $dashimage = DB::table('uploads')->where('id',$imgid)->get()[0]->name;
+        $pricing->image = url('/').'/storage/uploads/'.$dashimage;
+        $slakes =  DB::table('priceslakes')->get();
+        return View('new.pricing', [
+                'frontpages' => $this->frontpages,
+                'pricing' => $pricing,
+                'page' => 'pricing',
+                'currentid' => $this->user_id,
+                'price_slakes' => $slakes,
+                ]);
+    }
+
+    public function buildlist()
+    {
+        $buildlist = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='buildlist') {
+                $buildlist = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $buildlist->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $buildlist->image = url('/').'/storage/uploads/'.$banner_image; 
+
+        $contacts =  DB::table('businesscontacts')->take(10)->get();
+        foreach($contacts as $key => $contact){
+            // Replace string in Email
+            $email = $contact->email_address;
+            $len = strlen($email);
+            $str1 = '';
+            for($i=0; $i < $len; $i++) {
+                if($i < 3 || $i > 10 && $i != ($len-2)) {
+                   $str1 .= '*';
+                } else {
+                   $str1 .= $email[$i];
+                }
+            }
+            $contacts[$key]->email_address = $str1;
+
+            // Replace string in Last Name
+            $last_name = $contact->last_name;
+            $len = strlen($last_name);
+            $str2 = '';
+            for($i=0; $i < $len; $i++) {
+                if($i < 3 || $i > 5 && $i != ($len-2)) {
+                   $str2 .= '*';
+                } else {
+                   $str2 .= $last_name[$i];
+                }
+            }
+            $contacts[$key]->last_name = $str2;
+
+             // Replace string in Company Name
+            $company_name = $contact->company_name;
+            $len = strlen($company_name);
+            $str3 = '';
+            for($i=0; $i < $len; $i++) {
+                if($i < 3 || $i > 5 && $i != ($len-2)) {
+                   $str3 .= '*';
+                } else {
+                   $str3 .= $company_name[$i];
+                }
+            }
+            $contacts[$key]->company_name = $str3;
+
+             // Replace string in Company Name
+            $phone_number = $contact->phone_number;
+            $len = strlen($phone_number);
+            $str4 = '';
+            for($i=0; $i < $len; $i++) {
+                if($i != ($len-1)) {
+                   $str4 .= '*';
+                } else {
+                   $str4 .= $phone_number[$i];
+                }
+            }
+            $contacts[$key]->phone_number = $str4;
+          
+
+        }
+
+        $industries = DB::table('businesscontacts')->select('industries')->whereNull('deleted_at')->get();
+        $indus = array();
+        foreach ($industries as $key => $value) { 
+            $string = substr($value->industries, 0, strpos($value->industries, ','));
+            if (!in_array($string, $indus)) {
+                array_push($indus, $string);
+            }    
+        }
+
+        $country = DB::table('businesscontacts')->select('country')->whereNull('deleted_at')->get();
+        $countries = array();
+        foreach ($country as $key => $value) { 
+            $cnt = $value->country;
+            if (!in_array($cnt, $countries)) {
+                array_push($countries, $cnt);
+            }    
+        }
+
+        $state = DB::table('businesscontacts')->select('state')->whereNull('deleted_at')->get();
+        $stat = array();
+        foreach ($state as $key => $value) { 
+            $states = $value->state;
+            if (!in_array($states, $stat)) {
+                array_push($stat, $states);
+            }    
+        }
+
+        $city = DB::table('businesscontacts')->select('city')->whereNull('deleted_at')->get();
+        $cities = array();
+        foreach ($city as $key => $value) { 
+            $citys = $value->city;
+            if (!in_array($citys, $cities)) {
+                array_push($cities, $citys);
+            }    
+        }
+
+        // $state = DB::table('san_states')->where('country_id', 231)->get();
+
+        $employee_range = DB::table('businesscontacts')->select('employees')->whereNull('deleted_at')->get();
+       
+        // foreach($employee_range as $key => $value){
+        //     // $empy = $value->employees;
+        //     $empy_string = explode("-", $value->employees);
+        //     echo '<pre>'; print_r($empy_string); echo '</pre>';
+
+        // }
+        // exit;
+
+
+        return View('new.buildlist', [
+                'frontpages' => $this->frontpages,
+                'buildlist' => $buildlist,
+                'currentid' => $this->user_id,
+                'page' => 'buildlist',
+                'business_contacts' => $contacts,
+                'filter_indus' => $indus,
+                'filter_contry' => $countries,
+                'filter_state' => $stat,
+                'filter_city' => $cities
+            ]);
+    }
+
+
+    public function filter(Request $request){
+        $fields = $request->data;
+        $ranges = $request->range;
+        $data = BusinessContact::where(function ($query) use ($fields) {
+                    foreach ($fields as $field => $value)
+                        $query->Where($field, 'like', '%' . $value . '%');
+                })->get();
+        $final_result = $data->toArray();
+        if(!empty($ranges)){
+            foreach($final_result as $key => $value){ 
+                // $empy = $value->employees;
+                if (strpos($value['employees'], '>') !== false) {
+
+                       $value['employees'] =  trim(str_replace(">","",$value['employees']));
+                }
+                $empy_string = explode("-", $value['employees']);
+                // print_r($empy_string);
+                if(isset($empy_string[0]) && isset($empy_string[1]) && $ranges['first_range'] < $empy_string[0] && $ranges['first_range'] > $empy_string[1] && $ranges['second_range'] < $empy_string[0] && $ranges['second_range'] > $empy_string[1])
+                {
+                   unset($final_result[$key]); 
+                }
+                if($ranges['first_range'] < $value['employees'] && $ranges['second_range'] < $value['employees'])
+                {
+                   unset($final_result[$key]); 
+                }
+
+            }
+      // print_r($final_result); exit;
+        }
+        return response()->json($final_result);die();
+    }
+
+    public function get_cities(Request $request){
+        $stateid = $request->stateid;
+        $data = DB::table('cities')->where('state_id', $request->stateid)->get();
+        return response()->json($data);die();
+    }
+
+    public function readymade()
+    {
+        $readymade = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='readymade') {
+                $readymade = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $readymade->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $readymade->image = url('/').'/storage/uploads/'.$bnr_img;
+        $slake =  DB::table('priceslakes')->get();
+        return View('new.readymade', [
+                'frontpages' => $this->frontpages,
+                'currentid' => $this->user_id,
+                'readymade' => $readymade,
+                'page' => 'readymade',
+                'price_slakes' => $slake,
+            ]);
+    }
+
+    public function healthprofessional()
+    {
+        $healthprofessional = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='healthprofessional') {
+                $healthprofessional = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $healthprofessional->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $healthprofessional->image = url('/').'/storage/uploads/'.$banner_image;
+        $query = DB::table('healthprofessionals')->get();
+        return View('new.healthcareprof', [
+                'frontpages' => $this->frontpages,
+                'healthprofessional' => $healthprofessional,
+                'page' => 'healthprofessional',
+                'currentid' => $this->user_id,
+                'query' => $query,
+            ]);
+    }
+
+    public function realestateagentdata()
+    {
+        $realestateagentdata = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='realestateagentdata') {
+                $realestateagentdata = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $realestateagentdata->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $realestateagentdata->image = url('/').'/storage/uploads/'.$banner_image;
+        $estate_query = DB::table('realestateagentdatas')->get();
+        return View('new.estatedata', [
+            'frontpages' => $this->frontpages,
+            'realestateagentdata' => $realestateagentdata,
+            'page' => 'realestateagentdata',
+            'currentid' => $this->user_id,
+            'estate' => $estate_query       
+        ]);
+    }
+
+
+    public function frontlogin($status='')
+    {
+        if (isset($_GET['signup'])) {
+            $signup = $_GET['signup'];       
+        }else{
+            $signup = '';
+        }
+        return View('new.login', [
+            'frontpages' => $this->frontpages,
+            'page' => 'login',
+            'currentid' => $this->user_id,
+            'signup' => $signup ? $signup : '',
+            'status' =>$status
+        ]);
+    }
+
+    public function newsletter(Request $request)
+    {
+        $email = $request->email;
+        $newsletter = DB::table('subscribers')->insert(array('email' => $email));
+        if($newsletter == 1){
+           return redirect("/#newslettr_form")->with('message', 'Submit Successfully');
+
+        }else{
+            return false;
+        }
+        // return redirect("/");
+
+    }
+
+    public function newsltremail(Request $request)
+    {
+        $email = $request->email;
+
+        $emailexist = DB::table('subscribers')->where('email', $email)->first();
+
+        if($emailexist){
+            echo $email;
+            return false;
+        }else{
+            echo 0;
+        }
+        die();
+    }
+
+    public function signup()
+    {
+        include public_path('new-assets/code.php');
+        $characters = json_decode($country); 
+        return View('new.registration', [
+            'page' => 'signup',
+            'currentid' => $this->user_id,
+            'country_code' => $characters
+        ]);
+    }
+
+    /* Sign up */
+    public function signupp(Request $request){
+        $cntry = $request->cntry;
+        $user = User::create([
+            'name' => $request->fname,
+            'fname' => $request->fname,
+            'lname' => $request->lname,
+            'cname' => $request->cname,
+            'phone' => $request->phone,
+            'email' => $request->email,
+            'password' => sha1($request->password),
+            'type' => "User",
+        ]);
+        $role = Role::where('name', 'USERS')->first();
+        // $user->attachRole($role);
+        DB::table('users')->where('id', $user->id)->update(['cntry' => $cntry]);
+        Mail::send('emails.send_login_cred', ['user' => $user], function ($m) use ($user) {
+                    $m->from('sandeep.digittrix@gmail.com', 'Admin');
+                    $m->to('shikha.digittrix@gmail.com', $user->name)->subject('Global Leads - Verify Your email');
+                });
+        return redirect("/frontlogin?signup=1");
+    }
+
+    public function verify($id){
+
+        $verifyed = DB::table('users')->where('id', $id)->update(['verify' => 1]);
+
+        if($verifyed == 1){
+            Mail::send('emails.welcome_msg', ['user' => []], function ($m) {
+                $m->from('sandeep.digittrix@gmail.com', 'Glob Leads');
+                $m->to('shikha.digittrix@gmail.com')->subject('Global Leads - Welcome');
+            });
+        }
+      
+        return redirect("/frontlogin?verify=".$verifyed);
+    }
+
+    public function emailcheck(Request $request){
+        $email = $request->email;
+
+        $emailexist = DB::table('users')->where('email', $email)->first();
+
+        if($emailexist){
+            echo $email;
+        }else{
+            echo 0;
+        }
+        die();
+    }
+
+    public function emailchecks(Request $request){
+        $email = $request->email;
+
+        $emailexists = DB::table('users')->where('email', $email)->first();
+
+        if($emailexists){
+            echo $email;
+        }else{
+            echo 0;
+        }
+        die();
+    }
+
+    /*login*/
+    public function dologin(Request $request){
+        $userid = Session::forget('user_id');
+        $email = $request->email;
+        $password = sha1($request->password);
+        $users = DB::table('users')->where('email',$email)->where('password',$password)->where('verify', 1)->get();
+        // print_r($users); exit;
+        if (isset($users[0]->id)) {
+            Session::put('user_id', $users[0]->id);
+            return redirect("/dashboard");
+        }else{
+
+            return redirect()->back()->withErrors(['login_err'])->withInput();
+        }
+
+    }
+    
+    /*Logout*/
+    public function logout(Request $request)
+    {
+        Session::forget('user_id');
+        return redirect("/");
+    }
+
+    public function resetpassword(Request $request)
+    {
+      $admin_email = $this->GetAdminEmail();
+      //echo '<pre>'; print_r($admin_email); exit();
+    }
+
+
+    public function updtpassword()
+    {
+        return View('new.updatepassword', [
+            'page' => 'updtpassword',
+            'currentid' => $this->user_id,
+        ]);
+    }
+
+    public function dashboard()
+    {
+        if (isset($_GET['updateinfo'])) {
+            $updateinfo = $_GET['updateinfo'];       
+        }else{
+            $updateinfo = '';
+        }
+        $userid = Session::get('user_id');
+        $dashborddb = DB::table('users')->where('id', $userid)->get();
+        if (!isset($userid)) {
+            return redirect("/home");
+        }
+        return View('dashboard', [
+            'page' => 'dashboard',
+            'update' => $updateinfo ? $updateinfo : '',
+            'currentid' => $this->user_id,
+            'dashbrd' => $dashborddb,
+        ]);
+    }
+
+    /*** User Info Update From dashboard****/
+    function updateinfo(Request $request){
+        $userid = Session::get('user_id');
+        $fname = $request->fname;
+        $lstname = $request->lname;
+        $cpmyname = $request->cname;
+        $phone = $request->phone;
+        $email = $request->email;
+        $cntry = $request->cntry;
+        $newpassword = sha1($request->password);
+        DB::table('users')->where('id', $userid)->update(['fname' => $fname, 'lname' => $lstname, 'cname' => $cpmyname, 'phone' => $phone, 'cntry' => $cntry, 'email' => $email, 'password' => $newpassword]);
+        return redirect("/dashboard?$userid");
+    }
+
+    public function reset()
+    {
+        return View('new.resetpassword', [
+            'page' => 'reset',
+            'currentid' => $this->user_id,
+        ]);
+    }
+
+
+    public function external()
+    {
+        $external = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='external') {
+                $external = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $external->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $external->image = url('/').'/storage/uploads/'.$banner_image;
+        return View('new.external', [
+            'frontpages' => $this->frontpages,
+            'external' => $external,
+            'currentid' => $this->user_id,
+            'page' => 'external'
+        ]);
+    }
+
+    public function leadership()
+    {
+        $leadership = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='leadership') {
+                $leadership = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $leadership->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $leadership->image = url('/').'/storage/uploads/'.$bnr_img;
+        return View('new.leadership', [
+            'frontpages' => $this->frontpages,
+            'leadership' => $leadership,
+            'currentid' => $this->user_id,
+            'page' => 'leadership'
+        ]);
+    }
+
+    public function press()
+    {
+        $press = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='press') {
+                $press = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $press->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $press->image = url('/').'/storage/uploads/'.$bnr_img;
+        return View('new.pressroom', [
+            'frontpages' => $this->frontpages,
+            'press' => $press,
+            'currentid' => $this->user_id,
+            'page' => 'press'
+        ]);
+    }
+   
+    public function gdrp()
+    {
+        $gdrp = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='gdrp') {
+                $gdrp = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $gdrp->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $gdrp->image = url('/').'/storage/uploads/'.$banner_image;
+        return View('new.gdrpready', [
+            'frontpages' => $this->frontpages,
+            'gdrp' => $gdrp,
+            'currentid' => $this->user_id,
+            'page' => 'gdrp'
+        ]);
+    }
+
+    public function guarantees()
+    {
+        $guarantees = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='guarantees') {
+                $guarantees = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $guarantees->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $guarantees->image = url('/').'/storage/uploads/'.$banner_image;
+        return View('new.guarantees', [
+            'frontpages' => $this->frontpages,
+            'guarantees' => $guarantees,
+            'currentid' => $this->user_id,
+            'page' => 'guarantees'
+        ]);
+    }
+
+    public function monthlyplan()
+    {
+        $monthlyplan = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='monthlyplan') {
+                $monthlyplan = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $monthlyplan->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $monthlyplan->image = url('/').'/storage/uploads/'.$bnr_img;
+        return View('new.monthyplan', [
+            'frontpages' => $this->frontpages,
+            'monthlyplan' => $monthlyplan,
+            'currentid' => $this->user_id,
+            'page' => 'monthlyplan'
+        ]);
+    }
+
+    public function joblevel()
+    {
+        $joblevel = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='joblevel') {
+                $joblevel = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $joblevel->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $joblevel->image = url('/').'/storage/uploads/'.$bnr_img;
+        $query =  DB::table('joblevels')->get();
+        return View('new.joblevels', [
+            'frontpages' => $this->frontpages,
+            'joblevel' => $joblevel,
+            'page' => 'joblevel',
+            'currentid' => $this->user_id,
+            'query' => $query,
+        ]);
+    }
+
+    public function jobtitle()
+    {
+        $jobtitle = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='jobtitle') {
+                $jobtitle = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $jobtitle->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $jobtitle->image = url('/').'/storage/uploads/'.$bnr_img;
+        $query = DB::table('jobtitles')->get(); 
+        return View('new.jobtitle', [
+            'frontpages' => $this->frontpages,
+            'jobtitle' => $jobtitle,
+            'page' => 'jobtitle',
+            'currentid' => $this->user_id,
+            'query' => $query,
+        ]);
+    }
+
+    public function industrie()
+    {
+        $industrie = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='industrie') {
+                $industrie = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $industrie->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $industrie->image = url('/').'/storage/uploads/'.$bnr_img;
+        $industry = DB::table('industries')->get();
+        return View('new.industries', [
+            'frontpages' => $this->frontpages,
+            'industrie' => $industrie,
+            'currentid' => $this->user_id,
+            'page' => 'industrie',
+            'industry' => $industry,
+        ]);
+    }
+
+    
+    public function country()
+    {
+        $country = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='country') {
+                $country = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $country->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $country->image = url('/').'/storage/uploads/'.$banner_image;
+        return View('new.country', [
+            'frontpages' => $this->frontpages,
+            'country' => $country,
+            'currentid' => $this->user_id,
+            'page' => 'country',
+        ]);
+    }
+
+    public function termsofuse()
+    {
+        $termsofuse = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='termsofuse') {
+                $termsofuse = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $termsofuse->image;
+        $bnr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $termsofuse->image = url('/').'/storage/uploads/'.$bnr_img;
+        return View('new.termsofuse', [
+            'frontpages' => $this->frontpages,
+            'termsofuse' => $termsofuse,
+            'currentid' => $this->user_id,
+            'page' => 'termsofuse'
+        ]);
+    }
+
+    public function privacypolicy()
+    {
+        $privacypolicy = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='privacypolicy') {
+                $privacypolicy = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $privacypolicy->image;
+        $banner_image = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $privacypolicy->image = url('/').'/storage/uploads/'.$banner_image;
+        return View('new.privacypolicy', [
+            'frontpages' => $this->frontpages,
+            'privacypolicy' => $privacypolicy,
+            'currentid' => $this->user_id,
+            'page' => 'privacypolicy'
+        ]);
+    }
+
+    public function legalnotice()
+    {
+        $legalnotice = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='legalnotice') {
+                $legalnotice = $this->frontpages[$pagekey];
+            }
+        }
+        $imgid = $legalnotice->image;
+        $banr_img = DB::table('uploads')->where('id', $imgid)->get()[0]->name;
+        $legalnotice->image = url('/').'/storage/uploads'.$banr_img;
+        return View('new.legalnotice', [
+            'frontpages' => $this->frontpages,
+            'legalnotice' => $legalnotice,
+            'currentid' => $this->user_id,
+            'page' => 'legalnotice'
+        ]);
+    }
+
+    public function onlinelistbuild()
+    {
+        $onlinelistbuild = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='onlinelistbuild') {
+                $onlinelistbuild = $this->frontpages[$pagekey];
+            }
+        }
+        $imgaeid = $onlinelistbuild->image;
+        $dashimage = DB::table('uploads')->where('id',$imgaeid)->get()[0]->name;
+        $onlinelistbuild->image = url('/').'/storage/uploads/'.$dashimage;
+        return View('new.onlinelistbuild', [
+            'frontpages' => $this->frontpages,
+            'onlinelistbuild' => $onlinelistbuild,
+            'currentid' => $this->user_id,
+            'page' => 'onlinelistbuild'
+        ]);
+    }
+}

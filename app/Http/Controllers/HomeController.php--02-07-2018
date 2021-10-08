@@ -1,0 +1,148 @@
+<?php
+/**
+ * Controller genrated using LaraAdmin
+ * Help: http://laraadmin.com
+ */
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests;
+use Illuminate\Http\Request;
+use DB;
+use Auth;
+/**
+ * Class HomeController
+ * @package App\Http\Controllers
+ */
+class HomeController extends Controller
+{
+    public $frontpages = array();
+    /**
+     * Create a new controller instance.
+     *
+     * @return void
+     */
+    public function __construct()
+    {
+        $this->frontpages = DB::table('frontpages')->whereNull('deleted_at')->get();
+    }
+
+    /**
+     * Show the application dashboard.
+     *
+     * @return Response
+     */
+    public function index()
+    {
+        $roleCount = \App\Role::count();// print_r($roleCount);exit;
+        if($roleCount != 0) {
+            $data = array();
+            $img = array('image','track_image');
+            if($roleCount != 0) {
+                $sliders = DB::table('slider_images')->whereNull('deleted_at')->get();
+                foreach ($this->frontpages as $pagekey => $pagedata) {
+                    if ($pagedata->slug =='home') {
+                        $data = $this->frontpages[$pagekey];
+                        foreach ($img as $key => $imgkey) {
+                            $dashimage = DB::table('uploads')->where('id',$this->frontpages[$pagekey]->$imgkey)->get()[0]->name;
+                            $data->$imgkey = str_replace("public","",url('/')).'storage/uploads/'.$dashimage;
+                        }
+                    }
+                }
+                foreach ($sliders as $key => $value) {
+                    $image = DB::table('uploads')->where('id',$value->image)->get()[0]->name;
+                    $imgpath = str_replace("public","",url('/')).'storage/uploads/'.$image;
+                    $sliders[$key]->image_path = $imgpath;
+                }
+                return View('home', [
+                    'frontpages' => $this->frontpages,
+                    'sliders' => $sliders,
+                    'homedata' => $data,
+                    'currentid' => Auth::id(),
+                    'page' => 'home'
+                    ]);
+            }
+        } else {
+            return view('errors.error', [
+                'title' => 'Migration not completed',
+                'message' => 'Please run command <code>php artisan db:seed</code> to generate required table data.',
+            ]);
+        }
+    }
+
+    public function about()
+    {
+        $aboutdata = array();
+        $img = array('image','fet_img_one','fet_img_two');
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='about') {
+                $aboutdata = $this->frontpages[$pagekey];
+                foreach ($img as $key => $imgkey) {
+                    $dashimage = DB::table('uploads')->where('id',$this->frontpages[$pagekey]->$imgkey)->get()[0]->name;
+                    $aboutdata->$imgkey = str_replace("public","",url('/')).'storage/uploads/'.$dashimage;
+                }
+
+            }
+        }
+        return View('san.about', [
+                'frontpages' => $this->frontpages,
+                'aboutdata' => $aboutdata,
+                'page' => 'about'
+                ]);
+    }
+
+    public function contact($status='')
+    {
+        $contactdata = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='contact') {
+                $contactdata = $this->frontpages[$pagekey];
+            }
+        }
+        return View('san.contact', [
+                'frontpages' => $this->frontpages,
+                'contactdata' => $contactdata,
+                'page' => 'contact',
+                'status'  => $status
+        ]);
+    }
+
+    public function pricing()
+    {
+        $pricing = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='pricing') {
+                $pricing = $this->frontpages[$pagekey];
+            }
+        }
+        return View('san.pricing', [
+                'frontpages' => $this->frontpages,
+                'pricing' => $pricing,
+                'page' => 'pricing'
+                ]);
+    }
+
+    public function faq()
+    {
+        $faq = array();
+        foreach ($this->frontpages as $pagekey => $pagedata) {
+            if ($pagedata->slug =='faq') {
+                $faq = $this->frontpages[$pagekey];
+            }
+        }
+        return View('san.faq', [
+                'frontpages' => $this->frontpages,
+                'faq' => $faq,
+                'page' => 'faq'
+                ]);
+    }
+
+    public function frontlogin($status='')
+    {
+        return View('san.login', [
+                'frontpages' => $this->frontpages,
+                'page' => 'login',
+                'status' =>$status
+                ]);
+    }
+}
